@@ -1,0 +1,5 @@
+class ( a ) 
+{
+     def b:float;
+     b = 2.5;
+} 

@@ -1,0 +1,35 @@
+class
+
+x = 10
+
+y = 5.2
+
+z = 1.5E10
+
+"hola mundo"
+
+'a'
+
+$ comentario completo
+
+if
+
+x == 10
+
+y != 20
+
+a <= b
+
+c >= d
+
+e && f
+
+g || h
+
+@
+
+#
+
+"cadena sin cerrar
+
+12abc
