@@ -16,6 +16,7 @@
 #include "portable-file-dialogs.h"
 #include <fstream>
 #include <sstream>
+#include <stack>
 #include <string.h>
 
 // Buffers para mostrar el texto en el GUI
@@ -23,6 +24,8 @@ char bufCodigo[ 50000 ] = "";
 char bufTokens[ 50000 ] = "";
 char bufSintaxis[ 50000 ] = "";
 char bufErrores[ 50000 ] = "";
+
+int pos_lexico = 0;
 
 int transiciones[ 20 ][ 35 ] =
     {
@@ -233,7 +236,7 @@ int relaciona( const char car, const int estado ) {
     }
 }
 
-void tokenizador( char cad[], const int estado ) {
+token tokenizador( char cad[], const int estado ) {
     token tokenNuevo;
     strcpy( tokenNuevo.lexema, cad );
     switch ( estado ) {
@@ -313,10 +316,10 @@ void tokenizador( char cad[], const int estado ) {
         default:  strcpy( tokenNuevo.gramema, "error" ); break;
     }
     tokenNuevo.estado = estado;
-    crearNodo( tokenNuevo );
+    return tokenNuevo;
 }
 
-void detectarError( char cad[], const int estado ) {
+token detectarError( char cad[], const int estado ) {
     token tokenNuevo;
     strcpy( tokenNuevo.lexema, cad );
     switch ( estado ) {
@@ -344,7 +347,7 @@ void detectarError( char cad[], const int estado ) {
             strcpy( tokenNuevo.gramema, "error" ); break;
     }
     tokenNuevo.estado = estado;
-    crearNodo( tokenNuevo );
+    return tokenNuevo;
 }
 
 int pos_tk = 0;
@@ -360,45 +363,98 @@ void liberarLista() {
     primero = nullptr;
 }
 
-void analiza( const char* bufferIO ) {
-    liberarLista();
-    pos_tk = 0;
+int obtenerTerminalSintactico(const token &tk) {
+    // final del archivo
+    if (tk.estado == 509) return 244; // $
 
+    // identificador o palabra reservada
+    if (tk.estado == 100 || tk.estado == 101) {
+        if (strcmp(tk.lexema, "class") == 0) return 200;
+        if (strcmp(tk.lexema, "def") == 0) return 202;
+        if (strcmp(tk.lexema, "int") == 0) return 203;
+        if (strcmp(tk.lexema, "float") == 0) return 204;
+        if (strcmp(tk.lexema, "char") == 0) return 205;
+        if (strcmp(tk.lexema, "bool") == 0) return 206;
+        if (strcmp(tk.lexema, "string") == 0) return 207;
+        if (strcmp(tk.lexema, "if") == 0) return 208;
+        if (strcmp(tk.lexema, "else") == 0) return 209;
+        if (strcmp(tk.lexema, "do") == 0) return 210;
+        if (strcmp(tk.lexema, "while") == 0) return 211;
+        if (strcmp(tk.lexema, "dowhile") == 0) return 212;
+        if (strcmp(tk.lexema, "input") == 0) return 213;
+        if (strcmp(tk.lexema, "output") == 0) return 214;
+        if (strcmp(tk.lexema, "break") == 0) return 215;
+        if (strcmp(tk.lexema, "loop") == 0) return 216;
+        return 201; // Si no es reservada, es un ID normal
+    }
+
+    // otros símbolos
+    switch(tk.estado) {
+        case 102: return 217; // cteentera
+        case 103: return 218; // ctereal
+        case 104: return 219; // ctenotacion
+        case 105: return 220; // +
+        case 106: return 221; // -
+        case 107: return 222; // *
+        case 108: return 223; // /
+        case 109: return 224; // =
+        case 110: return 225; // ==
+        case 111: return 226; // <
+        case 112: return 227; // <=
+        case 113: return 228; // >
+        case 114: return 229; // >=
+        case 115: return 230; // !=
+        case 116: return 231; // !
+        case 117: return 232; // &&
+        case 118: return 233; // ||
+        case 119: return 234; // (
+        case 120: return 235; // )
+        case 123: return 236; // ;
+        case 124: return 237; // ,
+        case 131: return 238; // :
+        case 129: return 239; // {
+        case 130: return 240; // }
+        case 125: return 241; // ctecaracter
+        case 126: return 242; // ctestring
+        case 128: return 243; // %
+        default : return -1 ; // Símbolo desconocido
+    }
+}
+
+token nextToken() {
     char cadena[ 100 ];
     int estado = 0;
     int cont_cadena = 0;
-    int i_buf = 0;
 
     while ( true ) {
-        int car = bufferIO[ i_buf ] == '\0' ? EOF : bufferIO[ i_buf ];
-        i_buf++;
+        const int car = bufCodigo[ pos_lexico ] == '\0' ? EOF : bufCodigo[ pos_lexico ];
+        pos_lexico = pos_lexico + 1;
 
         cadena[ cont_cadena ] = car;
-        int columna = relaciona( car, estado );
+        const int columna = relaciona( car, estado );
         estado = transiciones[ estado ][ columna ];
-        cont_cadena++;
+        cont_cadena = cont_cadena + 1;
 
+        // Si el estado es de aceptación (terminó la palabra)
         if ( estado > 19 ) {
             if ( ( estado >= 100 && estado <= 104 ) || estado == 109 || estado == 111 || estado == 113 || estado == 116 ) {
                 cadena[ cont_cadena - 1 ] = '\0';
-                i_buf--;
+                pos_lexico = pos_lexico - 1; // Retrocedemos
             } else {
                 cadena[ cont_cadena ] = '\0';
             }
 
-            pos_tk++;
-            if ( estado >= 100 && estado <= 130 ) {
-                tokenizador( cadena, estado );
-            }else {
-                detectarError( cadena, estado );
+            token tk_actual;
+            if ( estado >= 100 && estado <= 132 ) {
+                tk_actual = tokenizador( cadena, estado );
+            } else {
+                tk_actual = detectarError( cadena, estado );
             }
 
-            estado = 0;
+            // Lo metemos a la lista para que se imprima
+            crearNodo(tk_actual);
 
-            if ( car == EOF ) {
-                break;
-            }
-            cont_cadena = 0;
+            return tk_actual;
         }
     }
 }
@@ -409,7 +465,7 @@ void imprimir() {
     // Limpiamos los buffers antes de escribir
     memset( bufTokens, 0, sizeof( bufTokens ) );
     memset( bufErrores, 0, sizeof( bufErrores ) );
-    memset( bufSintaxis, 0, sizeof( bufSintaxis ) );
+    // memset( bufSintaxis, 0, sizeof( bufSintaxis ) );
 
     while ( actual != nullptr ) {
         char linea[ 150 ];
@@ -423,6 +479,77 @@ void imprimir() {
         }
 
         actual = actual -> siguiente;
+    }
+}
+
+void analizadorSintactico() {
+    std::stack< int > pila;
+    pila.push( 244 ); // $ (Fin del archivo)
+    pila.push( 0 );   // PROGRAM
+
+    pos_lexico = 0; // Reiniciamos el cursor de texto del Léxico
+    liberarLista();  // Limpiamos la memoria anterior
+
+    token actual = nextToken();
+
+    while ( !pila.empty(  ) ) {
+
+        // Saltamos los errores léxicos para que el sintáctico no explote
+        if ( actual.estado >= 500 && actual.estado != 509 ) {
+            actual = nextToken();
+            continue;
+        }
+
+        const int X = pila.top(  ); // Lo que hay en la cima de la pila
+        const int a = obtenerTerminalSintactico( actual ); // El token actual
+
+        if ( a == -1 ) {
+            strcat( bufSintaxis, "Error: Token lexico no reconocido por el parser.\n" );
+            break;
+        }
+
+        // Si X es un Terminal o el fin de archivo
+        if ( X >= 200 || X == 244 ) {
+            if ( X == a ) {
+                pila.pop(  ); // Son iguales, lo sacamos
+
+                if (a != 244) {
+                    actual = nextToken();
+                }
+            } else {
+                char error[ 150 ];
+                sprintf( error, "Error Sintactico: Se esperaba ID %d pero llego '%s'\n", X, actual.lexema );
+                strcat( bufSintaxis, error );
+                break;
+            }
+        }
+        // Si X es un No Terminal (0 al 28)
+        else {
+            if ( const int index_prod = predicciones[ X ][ a - 200 ]; index_prod >= 550 ) { // Si la matriz indica error (casillas vacías/sync)
+                char error[ 150 ];
+                sprintf( error, "Error Sintactico inesperado cerca de: '%s'\n", actual.lexema );
+                strcat( bufSintaxis, error );
+                break;
+            } else {
+                pila.pop(  ); // Sacamos el No Terminal
+
+                // Si no es una producción que derive a vacio (-1)
+                if ( const int cant_tokens = producciones[ index_prod ][ 0 ]; cant_tokens > 0 ) {
+                    // Metemos la producción a la pila al revez
+                    for ( int i = cant_tokens; i >= 1; i-- ) {
+                        pila.push( producciones[ index_prod ][ i ]);
+                    }
+                }
+
+                char derivacion[ 150 ];
+                sprintf( derivacion, "-> Usa Regla [%d] al leer: %s\n", index_prod, actual.lexema );
+                strcat( bufSintaxis, derivacion );
+            }
+        }
+    }
+
+    if ( pila.empty(  ) ) {
+        strcat( bufSintaxis, "\n[OK] Sintaxis Correcta\n" );
     }
 }
 
@@ -505,12 +632,14 @@ int main() {
             memset(bufCodigo, 0, sizeof(bufCodigo));
             memset(bufTokens, 0, sizeof(bufTokens));
             memset(bufErrores, 0, sizeof(bufErrores));
+            memset(bufSintaxis, 0, sizeof(bufSintaxis));
             liberarLista();
         }
         ImGui::SameLine();
         if (ImGui::Button("Analizar", ImVec2(120, 30))) {
             if (strlen(bufCodigo) > 0) {
-                analiza(bufCodigo);
+                memset(bufSintaxis, 0, sizeof(bufSintaxis));
+                analizadorSintactico();
                 imprimir();
             }
         }
